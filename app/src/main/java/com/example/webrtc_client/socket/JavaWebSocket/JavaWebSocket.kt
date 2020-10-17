@@ -1,9 +1,13 @@
 package com.example.webrtc_client.socket.JavaWebSocket
 
 import android.util.Log
+import com.alibaba.fastjson.JSON
+import com.alibaba.fastjson.JSONArray
 import com.alibaba.fastjson.JSONObject
+import com.alibaba.fastjson.serializer.SerializerFeature
 import com.example.webrtc_client.ChatRoomActivity
 import com.example.webrtc_client.MainActivity
+import com.example.webrtc_client.connection.PeerConnectionManager.PeerConnectionManager
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
 import java.net.URI
@@ -18,8 +22,10 @@ class JavaWebSocket(activity: MainActivity) {
     private lateinit var mWebSocketClient: WebSocketClient
     private var mAcitivity: MainActivity = activity //小心内存泄漏
     private val TAG = "JavaWebSocket"
+    private lateinit var peerConnectionManager: PeerConnectionManager
 
     fun connect(wss: String) {
+        peerConnectionManager = PeerConnectionManager.instance
         var uri: URI = URI(wss)
         mWebSocketClient = object : WebSocketClient(uri) {
             override fun onOpen(handshakedata: ServerHandshake?) {
@@ -29,6 +35,7 @@ class JavaWebSocket(activity: MainActivity) {
 
             override fun onMessage(message: String?) {
                 Log.i(TAG, "onMessage:$message")
+                handleMessage(message)
             }
 
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
@@ -51,6 +58,26 @@ class JavaWebSocket(activity: MainActivity) {
             }
         }
     }
+
+    private fun handleMessage(message: String?) {
+        //将json转换成map
+        var map = JSON.parseObject(message, Map::class.java)
+        var eventName: String = map["eventName"] as String
+        if (eventName.equals("_peers")) {
+            handleJoinRoom(map)
+        }
+    }
+
+    private fun handleJoinRoom(map: Map<*, *>?) {
+        var data: Map<*, *> = map?.get("data") as Map<*, *>
+        var arr: JSONArray = data?.get("connections") as JSONArray
+        var js: String = JSONObject.toJSONString(arr, SerializerFeature.WriteClassName)
+        var connections: ArrayList<String> = JSONObject.parseArray(js, String::class.java)
+                as ArrayList<String> //房间里已经存在的链接数
+        var myId: String = data["you"] as String
+        peerConnectionManager.joinToRoom(this, connections, myId, true)
+    }
+
 
     fun joinRoom(roomId: String) {
         //给服务器发送json
