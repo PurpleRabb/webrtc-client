@@ -23,7 +23,7 @@ class WebRTCManager private constructor() {
     }
 
     fun joinRoom(chatRoomActivity: ChatRoomActivity, rootEglBase: EglBase) {
-        peerConnectionManager.initContext(chatRoomActivity.baseContext, rootEglBase)
+        peerConnectionManager.initContext(chatRoomActivity, rootEglBase)
         webSocket.joinRoom(roomId)
     }
 }
