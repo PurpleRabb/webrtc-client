@@ -1,6 +1,6 @@
 package com.example.webrtc_client.connection.PeerConnectionManager
 
-import android.content.Context
+import android.util.Log
 import com.example.webrtc_client.ChatRoomActivity
 import com.example.webrtc_client.socket.JavaWebSocket.JavaWebSocket
 import org.webrtc.*
@@ -24,7 +24,15 @@ class PeerConnectionManager private constructor() {
     private lateinit var context: ChatRoomActivity
     private lateinit var eglBase: EglBase
     private var localStream: MediaStream? = null
-    private lateinit var myId : String
+    private lateinit var myId: String
+    private lateinit var iceServers: ArrayList<PeerConnection.IceServer>
+    private lateinit var connectionIds: ArrayList<String> //保存所有用户的ID
+    private lateinit var connectionPeerDic: HashMap<String, Peer> //会议室外部用户与本地用户的peer链接
+
+    enum class Role {
+        Caller, //邀请
+        Receiver //被邀请
+    }
 
     companion object {
         val instance: PeerConnectionManager by lazy(mode = LazyThreadSafetyMode.SYNCHRONIZED) {
@@ -35,6 +43,17 @@ class PeerConnectionManager private constructor() {
     fun initContext(context: ChatRoomActivity, eglBase: EglBase) {
         this.context = context
         this.eglBase = eglBase
+        this.iceServers = ArrayList()
+        val iceServer = PeerConnection.IceServer.builder("stun:8.210.69.115:3478?transport=udp")
+            .setUsername("").setPassword("").createIceServer()
+
+        val iceServer1 = PeerConnection.IceServer.builder("turn:8.210.69.115:3478?transport=udp")
+            .setUsername("").setPassword("").createIceServer() //TODO
+        iceServers.add(iceServer)
+        iceServers.add(iceServer1)
+
+        connectionIds = ArrayList()
+        connectionPeerDic = HashMap()
     }
 
     fun joinToRoom(
@@ -54,6 +73,53 @@ class PeerConnectionManager private constructor() {
             if (localStream == null) {
                 createLocalStream()
             }
+            connectionIds.addAll(connections)
+            createPeerConnections()
+            //把本地数据流推向会议室的每一个人
+            addStreams()
+            //为每一个人发送邀请
+            createOffers()
+        }
+    }
+
+    private lateinit var role: Role
+    private fun createOffers() {
+        for (p in connectionPeerDic) {
+            role = Role.Caller
+            val mPeer = p.value
+            mPeer.peerConnection.createOffer(mPeer, offerOrAnswerConstrant())
+        }
+    }
+
+    private fun offerOrAnswerConstrant(): MediaConstraints {
+        val mediaConstraints = MediaConstraints()
+        val keyValuePairs: ArrayList<MediaConstraints.KeyValuePair> = ArrayList()
+        keyValuePairs.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
+        keyValuePairs.add(
+            MediaConstraints.KeyValuePair(
+                "OfferToReceiveVideo",
+                videoEnable.toString()
+            )
+        )
+        mediaConstraints.mandatory.addAll(keyValuePairs)
+        return mediaConstraints
+    }
+
+    //为所有用户推流
+    private fun addStreams() {
+        for (p in connectionPeerDic) {
+            if (localStream == null) {
+                createLocalStream()
+            }
+            p.value.peerConnection.addStream(localStream)
+        }
+    }
+
+    private fun createPeerConnections() {
+        //对每一个用户建立p2p链接
+        for (id in connectionIds) {
+            val peer = Peer(id)
+            connectionPeerDic[id] = peer
         }
     }
 
@@ -68,7 +134,7 @@ class PeerConnectionManager private constructor() {
 
         if (videoEnable) {
             videoCapturer = createVideoCapture()
-            videoSource = peerConnectionFactory?.createVideoSource(videoCapturer!!.isScreencast())
+            videoSource = peerConnectionFactory?.createVideoSource(videoCapturer!!.isScreencast)
             surfaceTextureHelper =
                 SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
             videoCapturer?.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
@@ -76,9 +142,7 @@ class PeerConnectionManager private constructor() {
             localVideoTrack = peerConnectionFactory?.createVideoTrack("ARDAMSv0", videoSource)
             localStream?.addTrack(localVideoTrack)
 
-            if (context != null) {
-                context.onSetLocalStream(localStream!!,myId)
-            }
+            context.onSetLocalStream(localStream!!, myId)
         }
     }
 
@@ -165,6 +229,82 @@ class PeerConnectionManager private constructor() {
 //        ).setVideoEncoderFactory(videoEncoderFactory)
 //            .setVideoDecoderFactory(videoDecoderFactory)
 //            .createPeerConnectionFactory()
+    }
+
+    inner class Peer(id: String) : PeerConnection.Observer, SdpObserver {
+        var peerConnection: PeerConnection //myid与远端用户之间的链接
+        private var socketId: String //其它用户的id
+
+        init {
+            val rtcConfiguration = PeerConnection.RTCConfiguration(iceServers)
+            peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfiguration, this)!!
+            this.socketId = id
+        }
+
+        //调用分两种情况：第一类连接到ICE服务器的时候，调用次数是网络中有多少个路由节点
+        //第二类 有人进入这个房间，对方到ICE的路由节点,调用次数是对方到ICE有多少个节点
+        override fun onIceCandidate(p0: IceCandidate?) {
+            //通过socket传递到服务器
+        }
+
+        override fun onDataChannel(p0: DataChannel?) {
+
+        }
+
+        override fun onIceConnectionReceivingChange(p0: Boolean) {
+
+        }
+
+        override fun onIceConnectionChange(p0: PeerConnection.IceConnectionState?) {
+
+        }
+
+        override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {
+
+        }
+
+        override fun onAddStream(p0: MediaStream?) {
+            //建立成功后设置多媒体流
+        }
+
+        override fun onSignalingChange(p0: PeerConnection.SignalingState?) {
+
+        }
+
+        override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {
+
+        }
+
+        override fun onRemoveStream(p0: MediaStream?) {
+
+        }
+
+        override fun onRenegotiationNeeded() {
+
+        }
+
+        override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {
+
+        }
+
+        //---->SdpObserver
+        override fun onSetFailure(p0: String?) {
+
+        }
+
+        override fun onSetSuccess() {
+
+        }
+
+        override fun onCreateSuccess(p0: SessionDescription?) {
+            Log.i("PeerConnectionManager", "onCreateSuccess")
+
+        }
+
+        override fun onCreateFailure(p0: String?) {
+
+        }
+
     }
 
 }
