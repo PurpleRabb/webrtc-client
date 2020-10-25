@@ -8,6 +8,7 @@ import android.view.Window
 import android.view.WindowManager
 import android.widget.FrameLayout
 import com.example.webrtc_client.utils.PermissionUtil
+import com.example.webrtc_client.utils.Utils
 import kotlinx.android.synthetic.main.activity_room.*
 import org.webrtc.*
 
@@ -16,6 +17,7 @@ class ChatRoomActivity : Activity() {
     private var localVideoTrack: VideoTrack? = null
     lateinit var webRTCManager: WebRTCManager
     lateinit var rootEglBase: EglBase
+    lateinit var utils: Utils
 
     var videoViews: HashMap<String, SurfaceViewRenderer> = HashMap<String, SurfaceViewRenderer>()
     var persons: ArrayList<String> = ArrayList<String>()
@@ -37,6 +39,7 @@ class ChatRoomActivity : Activity() {
         )
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_room)
+        utils = Utils(this)
         initView()
     }
 
@@ -86,7 +89,11 @@ class ChatRoomActivity : Activity() {
             var layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
             )
-
+            layoutParams.height = utils.getWidth(size)
+            layoutParams.width = layoutParams.height
+            layoutParams.leftMargin = utils.getX(size, i)
+            layoutParams.topMargin = utils.getY(size, i)
+            renderer?.layoutParams = layoutParams
         }
     }
 }
