@@ -96,4 +96,10 @@ class ChatRoomActivity : Activity() {
             renderer?.layoutParams = layoutParams
         }
     }
+
+    fun onAddRemoteStream(p0: MediaStream?, socketId: String) {
+        if (p0 != null) {
+            addView(socketId, p0)
+        }
+    }
 }

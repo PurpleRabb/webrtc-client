@@ -1,5 +1,6 @@
 package com.example.webrtc_client.socket.JavaWebSocket
 
+import android.R.attr
 import android.util.Log
 import com.alibaba.fastjson.JSON
 import com.alibaba.fastjson.JSONArray
@@ -10,6 +11,8 @@ import com.example.webrtc_client.MainActivity
 import com.example.webrtc_client.connection.PeerConnectionManager.PeerConnectionManager
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
+import org.webrtc.IceCandidate
+import org.webrtc.SessionDescription
 import java.net.URI
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -66,6 +69,27 @@ class JavaWebSocket(activity: MainActivity) {
         if (eventName.equals("_peers")) {
             handleJoinRoom(map)
         }
+
+        //对方响应
+        if (eventName.equals("_ice_candidate")) {
+            handleRemoteCandidate(map)
+        }
+    }
+
+    private fun handleRemoteCandidate(map: Map<*, *>?) {
+        var data = map?.get("data") as Map<*, *>
+        var socketId: String
+        if (data != null) {
+            socketId = data.get("socketId") as String
+            var sdpMid = data.get("id") as String
+            if (sdpMid == null) {
+                sdpMid = "video"
+            }
+            val sdpMLineIndex = java.lang.String.valueOf(data["label"]).toDouble() as Int
+            val candidate = data["candidate"] as String
+            val iceCandidate = IceCandidate(sdpMid, sdpMLineIndex, candidate)
+            peerConnectionManager.onRemoteIceCandidate(socketId, iceCandidate)
+        }
     }
 
     private fun handleJoinRoom(map: Map<*, *>?) {
@@ -89,6 +113,41 @@ class JavaWebSocket(activity: MainActivity) {
         val jsonObject = JSONObject(map)
         val jsonString: String = jsonObject.toString()
         Log.d(TAG, "send-->$jsonString")
+        mWebSocketClient.send(jsonString)
+    }
+
+    fun sendOffer(socketId: String, sdp: SessionDescription?) {
+        var childMap1: HashMap<String, Any> = HashMap()
+        childMap1.put("type", "offer")
+        if (sdp != null) {
+            childMap1.put("sdp", sdp)
+        }
+
+        var childMap2: HashMap<String, Any> = HashMap()
+        childMap2.put("socketId", socketId)
+        childMap2.put("sdp", childMap1)
+
+        var map: HashMap<String, Any> = HashMap()
+        map.put("eventName", "__offer")
+        map.put("data", childMap2)
+
+        var job = JSONObject(map)
+        var jsonString = job.toString()
+        mWebSocketClient.send(jsonString)
+
+    }
+
+    fun sendIceCandidate(socketId: String, iceCandidate: IceCandidate) {
+        val childMap = HashMap<String, Any>()
+        childMap["id"] = iceCandidate.sdpMid
+        childMap["label"] = iceCandidate.sdpMLineIndex
+        childMap["candidate"] = iceCandidate.sdp
+        childMap["socketId"] = socketId
+        val map = HashMap<String, Any>()
+        map["eventName"] = "__ice_candidate"
+        map["data"] = childMap
+        val obj = JSONObject(map)
+        val jsonString = obj.toString()
         mWebSocketClient.send(jsonString)
     }
 

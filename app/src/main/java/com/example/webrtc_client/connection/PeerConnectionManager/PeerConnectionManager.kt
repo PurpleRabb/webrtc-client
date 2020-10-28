@@ -28,6 +28,7 @@ class PeerConnectionManager private constructor() {
     private lateinit var iceServers: ArrayList<PeerConnection.IceServer>
     private lateinit var connectionIds: ArrayList<String> //保存所有用户的ID
     private lateinit var connectionPeerDic: HashMap<String, Peer> //会议室外部用户与本地用户的peer链接
+    private lateinit var webSocket: JavaWebSocket
 
     enum class Role {
         Caller, //邀请
@@ -64,6 +65,7 @@ class PeerConnectionManager private constructor() {
     ) {
         this.videoEnable = isVideoEnabled
         this.myId = myId
+        this.webSocket = javaWebSocket
         //这里初始化PeerConnection
         executor.execute {
             if (this.peerConnectionFactory == null) {
@@ -231,6 +233,13 @@ class PeerConnectionManager private constructor() {
 //            .createPeerConnectionFactory()
     }
 
+    fun onRemoteIceCandidate(socketId: String, iceCandidate: IceCandidate) {
+        var peer = connectionPeerDic[socketId]
+        if (peer != null) {
+            peer.peerConnection.addIceCandidate(iceCandidate)
+        }
+    }
+
     inner class Peer(id: String) : PeerConnection.Observer, SdpObserver {
         var peerConnection: PeerConnection //myid与远端用户之间的链接
         private var socketId: String //其它用户的id
@@ -245,6 +254,9 @@ class PeerConnectionManager private constructor() {
         //第二类 有人进入这个房间，对方到ICE的路由节点,调用次数是对方到ICE有多少个节点
         override fun onIceCandidate(p0: IceCandidate?) {
             //通过socket传递到服务器
+            if (p0 != null) {
+                webSocket.sendIceCandidate(socketId, p0)
+            }
         }
 
         override fun onDataChannel(p0: DataChannel?) {
@@ -265,6 +277,7 @@ class PeerConnectionManager private constructor() {
 
         override fun onAddStream(p0: MediaStream?) {
             //建立成功后设置多媒体流
+            context.onAddRemoteStream(p0, socketId)
         }
 
         override fun onSignalingChange(p0: PeerConnection.SignalingState?) {
@@ -293,12 +306,18 @@ class PeerConnectionManager private constructor() {
         }
 
         override fun onSetSuccess() {
+            //交换彼此的sdp
 
         }
 
         override fun onCreateSuccess(p0: SessionDescription?) {
             Log.i("PeerConnectionManager", "onCreateSuccess")
-
+            //设置本地的SDP，如果设置成功则回调onSetSuccess
+            peerConnection.setLocalDescription(this, p0)
+            if (peerConnection.signalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER) {
+                //本地sdp
+                webSocket.sendOffer(socketId, peerConnection.localDescription)
+            }
         }
 
         override fun onCreateFailure(p0: String?) {
