@@ -53,7 +53,7 @@ class ChatRoomActivity : Activity() {
 
     fun onSetLocalStream(stream: MediaStream, userId: String) {
         //在子线程调用，不能直接刷新界面
-        var videoTracks = stream.videoTracks
+        val videoTracks = stream.videoTracks
         if (videoTracks.size > 0) {
             localVideoTrack = videoTracks.get(0)
         }
@@ -65,7 +65,7 @@ class ChatRoomActivity : Activity() {
     //多次背调用，有几个人就调用几次
     private fun addView(userId: String, stream: MediaStream) {
         //界面显示
-        var surfaceViewRenderer = SurfaceViewRenderer(this)
+        val surfaceViewRenderer = SurfaceViewRenderer(this)
         surfaceViewRenderer.init(rootEglBase.eglBaseContext, null)
         //设置缩放模式
         surfaceViewRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
@@ -82,11 +82,11 @@ class ChatRoomActivity : Activity() {
         //往布局里面添加view
         wr_video_view.addView(surfaceViewRenderer)
 
-        var size = videoViews.size
+        val size = videoViews.size
         for (i in 0 until size) {
-            var peerId = persons.get(i)
-            var renderer = videoViews.get(peerId)
-            var layoutParams = FrameLayout.LayoutParams(
+            val peerId = persons[i]
+            val renderer = videoViews[peerId]
+            val layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
             )
             layoutParams.height = utils.getWidth(size)
@@ -98,8 +98,10 @@ class ChatRoomActivity : Activity() {
     }
 
     fun onAddRemoteStream(p0: MediaStream?, socketId: String) {
-        if (p0 != null) {
-            addView(socketId, p0)
+        runOnUiThread {
+            if (p0 != null) {
+                addView(socketId, p0)
+            }
         }
     }
 }

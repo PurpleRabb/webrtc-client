@@ -234,11 +234,19 @@ class PeerConnectionManager private constructor() {
     }
 
     fun onRemoteIceCandidate(socketId: String, iceCandidate: IceCandidate) {
-        var peer = connectionPeerDic[socketId]
-        if (peer != null) {
-            peer.peerConnection.addIceCandidate(iceCandidate)
+        val peer = connectionPeerDic[socketId]
+        peer?.peerConnection?.addIceCandidate(iceCandidate)
+    }
+
+    fun onReceiverAnswer(socketId: String, sdp: String) {
+        executor.execute {
+            //对方的sdp
+            val sessionDescription = SessionDescription(SessionDescription.Type.ANSWER, sdp)
+            val mPeer = connectionPeerDic[socketId]
+            mPeer?.peerConnection?.setRemoteDescription(mPeer, sessionDescription)
         }
     }
+
 
     inner class Peer(id: String) : PeerConnection.Observer, SdpObserver {
         var peerConnection: PeerConnection //myid与远端用户之间的链接

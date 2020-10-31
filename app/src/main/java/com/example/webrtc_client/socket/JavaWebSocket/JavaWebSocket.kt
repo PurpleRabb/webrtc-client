@@ -1,6 +1,5 @@
 package com.example.webrtc_client.socket.JavaWebSocket
 
-import android.R.attr
 import android.util.Log
 import com.alibaba.fastjson.JSON
 import com.alibaba.fastjson.JSONArray
@@ -29,7 +28,7 @@ class JavaWebSocket(activity: MainActivity) {
 
     fun connect(wss: String) {
         peerConnectionManager = PeerConnectionManager.instance
-        var uri: URI = URI(wss)
+        val uri = URI(wss)
         mWebSocketClient = object : WebSocketClient(uri) {
             override fun onOpen(handshakedata: ServerHandshake?) {
                 Log.i(TAG, "onOpen")
@@ -52,9 +51,9 @@ class JavaWebSocket(activity: MainActivity) {
         }
 
         if (wss.startsWith("wss")) {
-            var sslContext: SSLContext = SSLContext.getInstance("TLS")
+            val sslContext: SSLContext = SSLContext.getInstance("TLS")
             sslContext.init(null, arrayOf<TrustManager>(TrustManagerTest()), SecureRandom())
-            var factory = sslContext?.socketFactory
+            val factory = sslContext.socketFactory
             if (factory != null) {
                 mWebSocketClient.socket = factory.createSocket()
                 mWebSocketClient.connect()
@@ -64,9 +63,9 @@ class JavaWebSocket(activity: MainActivity) {
 
     private fun handleMessage(message: String?) {
         //将json转换成map
-        var map = JSON.parseObject(message, Map::class.java)
-        var eventName: String = map["eventName"] as String
-        if (eventName.equals("_peers")) {
+        val map = JSON.parseObject(message, Map::class.java)
+        val eventName: String = map["eventName"] as String
+        if (eventName == "_peers") {
             handleJoinRoom(map)
         }
 
@@ -74,31 +73,40 @@ class JavaWebSocket(activity: MainActivity) {
         if (eventName.equals("_ice_candidate")) {
             handleRemoteCandidate(map)
         }
-    }
 
-    private fun handleRemoteCandidate(map: Map<*, *>?) {
-        var data = map?.get("data") as Map<*, *>
-        var socketId: String
-        if (data != null) {
-            socketId = data.get("socketId") as String
-            var sdpMid = data.get("id") as String
-            if (sdpMid == null) {
-                sdpMid = "video"
-            }
-            val sdpMLineIndex = java.lang.String.valueOf(data["label"]).toDouble() as Int
-            val candidate = data["candidate"] as String
-            val iceCandidate = IceCandidate(sdpMid, sdpMLineIndex, candidate)
-            peerConnectionManager.onRemoteIceCandidate(socketId, iceCandidate)
+        if (eventName == "_answer") {
+            //获取对方的sdp
+            handleAnswer(map)
         }
     }
 
+    private fun handleAnswer(map: Map<*, *>?) {
+        val data = map?.get("data") as Map<*, *>
+        val sdpDic = data["sdp"] as Map<*,*>
+        val socketId = data["socketId"] as String
+        val sdp = sdpDic["sdp"] as String
+        peerConnectionManager.onReceiverAnswer(socketId,sdp)
+    }
+
+
+    private fun handleRemoteCandidate(map: Map<*, *>?) {
+        val data = map?.get("data") as Map<*, *>
+        val socketId: String
+        socketId = data["socketId"] as String
+        val sdpMid = data["id"] as String
+        val sdpMLineIndex = java.lang.String.valueOf(data["label"]).toDouble().toInt()
+        val candidate = data["candidate"] as String
+        val iceCandidate = IceCandidate(sdpMid, sdpMLineIndex, candidate)
+        peerConnectionManager.onRemoteIceCandidate(socketId, iceCandidate)
+    }
+
     private fun handleJoinRoom(map: Map<*, *>?) {
-        var data: Map<*, *> = map?.get("data") as Map<*, *>
-        var arr: JSONArray = data?.get("connections") as JSONArray
-        var js: String = JSONObject.toJSONString(arr, SerializerFeature.WriteClassName)
-        var connections: ArrayList<String> = JSONObject.parseArray(js, String::class.java)
+        val data: Map<*, *> = map?.get("data") as Map<*, *>
+        val arr: JSONArray = data["connections"] as JSONArray
+        val js: String = JSONObject.toJSONString(arr, SerializerFeature.WriteClassName)
+        val connections: ArrayList<String> = JSONObject.parseArray(js, String::class.java)
                 as ArrayList<String> //房间里已经存在的链接数
-        var myId: String = data["you"] as String
+        val myId: String = data["you"] as String
         peerConnectionManager.joinToRoom(this, connections, myId, true)
     }
 
@@ -117,22 +125,22 @@ class JavaWebSocket(activity: MainActivity) {
     }
 
     fun sendOffer(socketId: String, sdp: SessionDescription?) {
-        var childMap1: HashMap<String, Any> = HashMap()
+        val childMap1: HashMap<String, Any> = HashMap()
         childMap1.put("type", "offer")
         if (sdp != null) {
-            childMap1.put("sdp", sdp)
+            childMap1["sdp"] = sdp.description
         }
 
-        var childMap2: HashMap<String, Any> = HashMap()
+        val childMap2: HashMap<String, Any> = HashMap()
         childMap2.put("socketId", socketId)
-        childMap2.put("sdp", childMap1)
+        childMap2["sdp"] = childMap1
 
-        var map: HashMap<String, Any> = HashMap()
-        map.put("eventName", "__offer")
-        map.put("data", childMap2)
+        val map: HashMap<String, Any> = HashMap()
+        map["eventName"] = "__offer"
+        map["data"] = childMap2
 
-        var job = JSONObject(map)
-        var jsonString = job.toString()
+        val job = JSONObject(map)
+        val jsonString = job.toString()
         mWebSocketClient.send(jsonString)
 
     }
